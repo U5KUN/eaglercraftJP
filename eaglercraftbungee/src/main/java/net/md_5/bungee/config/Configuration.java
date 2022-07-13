@@ -23,6 +23,7 @@ public class Configuration {
 	private Collection<ListenerInfo> listeners;
 	private TMap<String, ServerInfo> servers;
 	private AuthServiceInfo authInfo;
+	private boolean voiceEnabled;
 	private boolean onlineMode;
 	private int playerLimit;
 	private String name;
@@ -55,6 +56,7 @@ public class Configuration {
 			adapter.forceSave();
 		}
 		this.authInfo = adapter.getAuthSettings();
+		this.voiceEnabled = adapter.getBoolean("voice_enabled", true);
 		this.onlineMode = false;
 		this.playerLimit = adapter.getInt("player_limit", this.playerLimit);
 		this.name = adapter.getString("server_name", EaglercraftBungee.name + " Server");
@@ -99,6 +101,10 @@ public class Configuration {
 
 	public TMap<String, ServerInfo> getServers() {
 		return this.servers;
+	}
+
+	public boolean isVoiceEnabled() {
+		return this.voiceEnabled;
 	}
 
 	public boolean isOnlineMode() {

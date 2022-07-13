@@ -8,6 +8,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
+import net.lax1dude.eaglercraft.EaglerAdapter;
 import net.lax1dude.eaglercraft.EaglercraftRandom;
 
 
@@ -1090,6 +1091,7 @@ public abstract class World implements IBlockAccess {
 		} else {
 			if (par1Entity instanceof EntityPlayer) {
 				EntityPlayer var5 = (EntityPlayer) par1Entity;
+				if (EaglerAdapter.voiceAllowed()) EaglerAdapter.sendStringData("EAG|VoiceReq", var5.username);
 				this.playerEntities.add(var5);
 				this.updateAllPlayersSleepingFlag();
 			}
@@ -1136,6 +1138,7 @@ public abstract class World implements IBlockAccess {
 		par1Entity.setDead();
 
 		if (par1Entity instanceof EntityPlayer) {
+			EaglerAdapter.sendStringData("EAG|VoiceRemove", ((EntityPlayer) par1Entity).username);
 			this.playerEntities.remove(par1Entity);
 			this.updateAllPlayersSleepingFlag();
 		}
@@ -1148,6 +1151,7 @@ public abstract class World implements IBlockAccess {
 		par1Entity.setDead();
 
 		if (par1Entity instanceof EntityPlayer) {
+			if (EaglerAdapter.voiceAllowed()) EaglerAdapter.sendStringData("EAG|VoiceRemove", ((EntityPlayer) par1Entity).username);
 			this.playerEntities.remove(par1Entity);
 			this.updateAllPlayersSleepingFlag();
 		}

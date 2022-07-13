@@ -4,6 +4,11 @@
 
 package net.md_5.bungee;
 
+import net.md_5.bungee.eaglercraft.BanList;
+import net.md_5.bungee.eaglercraft.DomainBlacklist;
+import net.md_5.bungee.eaglercraft.PluginEaglerSkins;
+import net.md_5.bungee.eaglercraft.PluginEaglerVoice;
+import net.md_5.bungee.eaglercraft.WebSocketListener;
 import net.md_5.bungee.tab.Custom;
 import net.md_5.bungee.api.tab.CustomTabList;
 import net.md_5.bungee.protocol.packet.Packet3Chat;
@@ -75,10 +80,6 @@ import net.md_5.bungee.api.plugin.Plugin;
 import net.md_5.bungee.command.CommandReload;
 import net.md_5.bungee.scheduler.BungeeScheduler;
 import net.md_5.bungee.config.YamlConfig;
-import net.md_5.bungee.eaglercraft.BanList;
-import net.md_5.bungee.eaglercraft.DomainBlacklist;
-import net.md_5.bungee.eaglercraft.PluginEaglerSkins;
-import net.md_5.bungee.eaglercraft.WebSocketListener;
 
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import net.md_5.bungee.util.CaseInsensitiveMap;
@@ -233,6 +234,7 @@ public class BungeeCord extends ProxyServer {
 		this.config.load();
 		this.pluginManager.detectPlugins(this.pluginsFolder);
 		this.pluginManager.addInternalPlugin(new PluginEaglerSkins());
+		if (this.config.isVoiceEnabled()) this.pluginManager.addInternalPlugin(new PluginEaglerVoice());
 		//if(this.config.getAuthInfo().isEnabled()) this.pluginManager.addInternalPlugin(new PluginEaglerAuth());
 		if (this.reconnectHandler == null) {
 			this.reconnectHandler = new SQLReconnectHandler();

@@ -3,6 +3,7 @@ package net.minecraft.src;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -13,6 +14,7 @@ import net.lax1dude.eaglercraft.DefaultSkinRenderer;
 import net.lax1dude.eaglercraft.EaglerAdapter;
 import net.lax1dude.eaglercraft.EaglercraftRandom;
 import net.lax1dude.eaglercraft.WebsocketNetworkManager;
+import net.lax1dude.eaglercraft.Voice;
 import net.lax1dude.eaglercraft.adapter.EaglerAdapterImpl2.RateLimit;
 import net.minecraft.client.Minecraft;
 
@@ -1166,6 +1168,41 @@ public class NetClientHandler extends NetHandler {
 			} catch (IOException var7) {
 				var7.printStackTrace();
 			}
+		}else if("EAG|Voice".equals(par1Packet250CustomPayload.channel)) {
+			if (!EaglerAdapter.voiceAvailable()) return;
+			EaglerAdapter.setVoiceAllowed(true);
+			if (EaglerAdapter.getVoiceChannel() != Voice.VoiceChannel.NONE) {
+				EaglerAdapter.setVoiceStatus(Voice.VoiceStatus.CONNECTING);
+				EaglerAdapter.sendStringData("EAG|VoiceJoin", "");
+			}
+		} else if("EAG|VoiceJoin".equals(par1Packet250CustomPayload.channel)) {
+			if (!EaglerAdapter.voiceAvailable()) return;
+			if (!EaglerAdapter.voiceAllowed()) return;
+			if (EaglerAdapter.getVoiceChannel() == Voice.VoiceChannel.NONE) return;
+			String targetUser = new String(par1Packet250CustomPayload.data, StandardCharsets.UTF_8);
+			EaglerAdapter.voiceJoinSet.add(targetUser);
+		}else if("EAG|VoiceAdd".equals(par1Packet250CustomPayload.channel)) {
+			if (!EaglerAdapter.voiceAvailable()) return;
+			if (!EaglerAdapter.voiceAllowed()) return;
+			if (EaglerAdapter.getVoiceChannel() == Voice.VoiceChannel.NONE) return;
+			EaglerAdapter.addVoicePeer(new String(par1Packet250CustomPayload.data, StandardCharsets.UTF_8), EaglerAdapter.getVoiceChannel() == Voice.VoiceChannel.GLOBAL);
+		}else if("EAG|VoiceRemove".equals(par1Packet250CustomPayload.channel)) {
+			if (!EaglerAdapter.voiceAvailable()) return;
+			if (!EaglerAdapter.voiceAllowed()) return;
+			if (EaglerAdapter.getVoiceChannel() == Voice.VoiceChannel.NONE) return;
+			EaglerAdapter.removeVoicePeer(new String(par1Packet250CustomPayload.data, StandardCharsets.UTF_8));
+		}else if("EAG|VoiceIce".equals(par1Packet250CustomPayload.channel)) {
+			if (!EaglerAdapter.voiceAvailable()) return;
+			if (!EaglerAdapter.voiceAllowed()) return;
+			if (EaglerAdapter.getVoiceChannel() == Voice.VoiceChannel.NONE) return;
+			EaglerAdapter.setVoiceStatus(Voice.VoiceStatus.CONNECTED);
+			EaglerAdapter.voiceIce(new String(par1Packet250CustomPayload.data, StandardCharsets.UTF_8));
+		}else if("EAG|VoiceDesc".equals(par1Packet250CustomPayload.channel)) {
+			if (!EaglerAdapter.voiceAvailable()) return;
+			if (!EaglerAdapter.voiceAllowed()) return;
+			if (EaglerAdapter.getVoiceChannel() == Voice.VoiceChannel.NONE) return;
+			EaglerAdapter.setVoiceStatus(Voice.VoiceStatus.CONNECTED);
+			EaglerAdapter.voiceDesc(new String(par1Packet250CustomPayload.data, StandardCharsets.UTF_8));
 		}
 	}
 

@@ -6,6 +6,7 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -14,7 +15,21 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Set;
+import java.util.Arrays;
+import java.util.List;
 
+import net.lax1dude.eaglercraft.AssetRepository;
+import net.lax1dude.eaglercraft.Base64;
+import net.lax1dude.eaglercraft.EaglerImage;
+import net.lax1dude.eaglercraft.EarlyLoadScreen;
+import net.lax1dude.eaglercraft.LocalStorageManager;
+import net.lax1dude.eaglercraft.ServerQuery;
+import net.lax1dude.eaglercraft.Voice;
+import net.lax1dude.eaglercraft.ExpiringSet;
+import net.minecraft.client.Minecraft;
+import net.minecraft.src.EntityPlayer;
+import net.minecraft.src.MathHelper;
+import net.minecraft.src.Packet250CustomPayload;
 import org.json.JSONObject;
 import org.teavm.interop.Async;
 import org.teavm.interop.AsyncCallback;
@@ -39,6 +54,7 @@ import org.teavm.jso.dom.html.HTMLDocument;
 import org.teavm.jso.dom.html.HTMLElement;
 import org.teavm.jso.dom.html.HTMLVideoElement;
 import org.teavm.jso.dom.html.HTMLImageElement;
+import org.teavm.jso.dom.html.HTMLAudioElement;
 import org.teavm.jso.media.MediaError;
 import org.teavm.jso.typedarrays.ArrayBuffer;
 import org.teavm.jso.typedarrays.DataView;
@@ -46,16 +62,7 @@ import org.teavm.jso.typedarrays.Float32Array;
 import org.teavm.jso.typedarrays.Int32Array;
 import org.teavm.jso.typedarrays.Uint8Array;
 import org.teavm.jso.typedarrays.Uint8ClampedArray;
-import org.teavm.jso.webaudio.AudioBuffer;
-import org.teavm.jso.webaudio.AudioBufferSourceNode;
-import org.teavm.jso.webaudio.AudioContext;
-import org.teavm.jso.webaudio.AudioListener;
-import org.teavm.jso.webaudio.DecodeErrorCallback;
-import org.teavm.jso.webaudio.DecodeSuccessCallback;
-import org.teavm.jso.webaudio.GainNode;
-import org.teavm.jso.webaudio.MediaElementAudioSourceNode;
-import org.teavm.jso.webaudio.MediaEvent;
-import org.teavm.jso.webaudio.PannerNode;
+import org.teavm.jso.webaudio.*;
 import org.teavm.jso.webgl.WebGLBuffer;
 import org.teavm.jso.webgl.WebGLFramebuffer;
 import org.teavm.jso.webgl.WebGLProgram;
@@ -66,15 +73,8 @@ import org.teavm.jso.webgl.WebGLUniformLocation;
 import org.teavm.jso.websocket.CloseEvent;
 import org.teavm.jso.websocket.WebSocket;
 
-import net.lax1dude.eaglercraft.AssetRepository;
-import net.lax1dude.eaglercraft.Base64;
-import net.lax1dude.eaglercraft.EaglerImage;
-import net.lax1dude.eaglercraft.EarlyLoadScreen;
-import net.lax1dude.eaglercraft.LocalStorageManager;
-import net.lax1dude.eaglercraft.ServerQuery;
 import net.lax1dude.eaglercraft.adapter.teavm.WebGLQuery;
 import net.lax1dude.eaglercraft.adapter.teavm.WebGLVertexArray;
-import net.minecraft.src.MathHelper;
 import net.lax1dude.eaglercraft.adapter.teavm.WebGL2RenderingContext;
 import static net.lax1dude.eaglercraft.adapter.teavm.WebGL2RenderingContext.*;
 
@@ -1759,6 +1759,8 @@ public class EaglerAdapterImpl2 {
 		return "fail".equals(res) ? false : true;
 	}
 	public static final void endConnection() {
+		setVoiceStatus(Voice.VoiceStatus.DISCONNECTED);
+
 		if(sock == null || sock.getReadyState() == 3) {
 			sockIsConnecting = false;
 		}
@@ -1937,7 +1939,7 @@ public class EaglerAdapterImpl2 {
 			public void handleEvent(MediaEvent evt) {
 				activeSoundEffects.remove(theId);
 			}
-			
+
 		});
 		return theId;
 	}
@@ -1997,28 +1999,278 @@ public class EaglerAdapterImpl2 {
 	public static final void openConsole() {
 		
 	}
-	private static boolean connected = false;
-	public static final void voiceConnect(String channel) {
-		win.alert("voice channels are not implemented yet");
-		connected = true;
+
+	@JSFunctor
+	private static interface StupidFunctionResolveBoolean extends JSObject {
+		void resolveBool(boolean b);
 	}
-	public static final void voiceVolume(float volume) {
-		
+
+	private static boolean hasGottenUserMedia = false;
+	private static boolean lastUserMedia = false;
+
+	@Async
+	public static native boolean voiceAvailable();
+	private static void voiceAvailable(AsyncCallback<Boolean> callback) {
+		if (!hasGottenUserMedia) {
+			hasGottenUserMedia = true;
+			export("eag_datasender", new DataSenderExporter() {
+				@Override
+				public void process(String name, String data) {
+					sendStringData(name, data);
+				}
+			});
+			export("eag_audioctx", audioctx);
+			getUserMedia(b -> {
+				lastUserMedia = b;
+				if (b) setVoiceStatus(Voice.VoiceStatus.DISCONNECTED);
+				callback.complete(b);
+			});
+		} else {
+			callback.complete(lastUserMedia);
+		}
 	}
-	public static final boolean voiceActive() {
-		return connected;
+
+	@JSBody(params = { "cb" }, script = "try { window.navigator.mediaDevices.getUserMedia({ audio: true, video: false }).then(function(stream) { stream.getAudioTracks()[0].enabled = false; window.eag_voice_stream = stream; window.eag_voice_peers = {}; window.eag_voice_audios = {}; window.eag_voice_audio_panners = {}; window.eag_voice_audio_gains = {}; window.eag_voice_audio_volume = 0.5; cb(true); }).catch(function(e) { cb(false); }); } catch (e) { cb(false); } return;")
+	public static native void getUserMedia(StupidFunctionResolveBoolean cb);
+
+	private static boolean voiceAllowed = false;
+	private static Voice.VoiceChannel enabledChannel = Voice.VoiceChannel.NONE;
+	private static Voice.VoiceStatus voiceStatus = Voice.VoiceStatus.UNAVAILABLE;
+	public static final void setVoiceAllowed(boolean allowed) {
+		voiceAllowed = allowed;
+	}
+	public static final boolean voiceAllowed() {
+		return voiceAllowed;
 	}
 	public static final boolean voiceRelayed() {
-		return connected;
+		return false;
 	}
-	public static final String[] voiceUsers() {
-		return new String[0];
+	public static final void sendStringData(String name, String data) {
+		Minecraft.getMinecraft().getNetHandler().addToSendQueue(new Packet250CustomPayload(name, data.isEmpty() ? new byte[] { 0 } : data.getBytes(StandardCharsets.UTF_8)));
 	}
-	public static final String[] voiceUsersTalking() {
-		return new String[0];
+	public static interface DataSenderExporter extends JSObject {
+		void process(String name, String data);
 	}
-	public static final void voiceEnd() {
-		connected = false;
+
+	@JSBody(params = { "name", "service" }, script = "window[name] = service;")
+	private static native void export(String name, JSObject service);
+
+	@JSBody(params = { "jsonStr", "global" }, script = "" +
+			"try {" +
+			"  const json = JSON.parse(jsonStr);\n" +
+			"  const sendData = window.eag_datasender.process;\n" +
+			"  const peer = new RTCPeerConnection({ iceServers: [ { urls: 'stun:stun.l.google.com:19302' } ] });\n" +
+			"  window.eag_voice_peers[json.username] = peer;\n" +
+			"  peer.addEventListener('icecandidate', function(event) {\n" +
+			"    if (event.candidate) sendData('EAG|VoiceIce', JSON.stringify({ username: json.username, ice_candidate: { sdpMLineIndex: event.candidate.sdpMLineIndex, candidate: event.candidate.candidate } }));\n" +
+			"  });\n" +
+			"  peer.addEventListener('track', function(event) {\n" +
+			"    const audio = new Audio();\n" +
+			"    window.eag_voice_audios[json.username] = audio;\n" +
+			"    audio.srcObject = event.streams[0];\n" +
+			"    const audioPanner = window.eag_audioctx.createPanner();\n" +
+			"    const audioSource = window.eag_audioctx.createMediaElementSource(audio);\n" +
+			"    const audioGain = window.eag_audioctx.createGain();\n" +
+			"    window.eag_voice_audio_panners[json.username] = audioPanner;\n" +
+			"    window.eag_voice_audio_gains[json.username] = audioGain;\n" +
+			"    audioPanner.maxDistance = 8.1;\n" +
+			"    audioPanner.rolloffFactor = 1.0;\n" +
+			"    audioPanner.distanceModel = 'linear';\n" +
+			"    audioPanner.panningModel = 'HRTF';\n" +
+			"    audioPanner.coneInnerAngle = 360.0;\n" +
+			"    audioPanner.coneOuterAngle = 0.0;\n" +
+			"    audioPanner.coneOuterGain = 0.0;\n" +
+			"    audioPanner.setOrientation(0.0, 1.0, 0.0);\n" +
+			"    audioPanner.setPosition(0, 0, 0);\n" +
+			"    audioGain.gain.value = window.eag_voice_audio_volume;\n" +
+			"    audioSource.connect(audioGain);\n" +
+			"    audioGain.connect(audioPanner);\n" +
+			"    if (!global) audioPanner.connect(window.eag_audioctx.destination);\n" +
+			"    audio.onloadedmetadata = function(e) {\n" +
+			"      audio.play();\n" +
+			"    };\n" +
+			"    audio.autoplay = true;\n" +
+			"    audio.volume = window.eag_voice_audio_volume;\n" +
+			"    if (!global) audio.muted = true;\n" +
+			"  });\n" +
+			"  peer.addStream(window.eag_voice_stream);\n" +
+			"  if (json.offer) {\n" +
+			"    peer.createOffer(function(local_description) {\n" +
+			"      peer.setLocalDescription(local_description, function() { \n" +
+			"        sendData('EAG|VoiceDesc', JSON.stringify({ username: json.username, session_description: local_description }));\n" +
+			"      }, function() {\n" +
+			"        console.error('Failed to set local description!');\n" +
+			"      });\n" +
+			"    }, function(e) {\n" +
+			"      console.error('Failed to create offer: ' + e);\n" +
+			"    });\n" +
+			"  }\n" +
+			"} catch (e) {  }" +
+			"return;")
+	public static native void addVoicePeer(String jsonStr, boolean global);
+	@JSBody(params = { "name" }, script = "window.eag_voice_peers[name].close(); delete window.eag_voice_peers[name]; window.eag_voice_audio_panners[name].disconnect(); delete window.eag_voice_audio_panners[name]; window.eag_voice_audio_gains[name].disconnect(); delete window.eag_voice_audio_gains[name]; window.eag_voice_audios[name].remove(); delete window.eag_voice_audios[name]; return;")
+	public static native void removeVoicePeer(String name);
+	@JSBody(params = { "jsonStr" }, script = "" +
+			"try {\n" +
+			"  const json = JSON.parse(jsonStr);\n" +
+			"  const sendData = window.eag_datasender.process;\n" +
+			"  const peeer = window.eag_voice_peers[json.username];\n" +
+			"  peeer.setRemoteDescription(new RTCSessionDescription(json.session_description), function() {\n" +
+			"    if (json.session_description.type == 'offer') {\n" +
+			"      peeer.createAnswer(function(local_description) {\n" +
+			"        peeer.setLocalDescription(local_description, function() {\n" +
+			"          sendData('EAG|VoiceDesc', JSON.stringify({ username: json.username, session_description: local_description }));\n" +
+			"        }, function() {\n" +
+			"          console.error('Failed to set local description!');\n" +
+			"        });\n" +
+			"      }, function(e) {\n" +
+			"        console.error('Failed to create answer: ' + e);\n" +
+			"      });\n" +
+			"    }\n" +
+			"  }, function(e) {\n" +
+			"    console.error('Failed to set remote description: ' + e);\n" +
+			"  });\n" +
+			"} catch (e) {  }\n" +
+			"return;")
+	public static native void voiceDesc(String jsonStr);
+	@JSBody(params = { "jsonStr" }, script = "" +
+			"try {\n" +
+			"  const json = JSON.parse(jsonStr);\n" +
+			"  window.eag_voice_peers[json.username].addIceCandidate(new RTCIceCandidate(json.ice_candidate));\n" +
+			"} catch (e) {  }\n" +
+			"return;")
+	public static native void voiceIce(String jsonStr);
+	@JSBody(params = {  }, script = "for (let peer in window.eag_voice_peers) window.eag_voice_peers[peer].close(); window.eag_voice_peers = {}; for (let un in window.eag_voice_audio_panners) window.eag_voice_audio_panners[un].disconnect(); window.eag_voice_audio_panners = {}; for (let un in window.eag_voice_audio_gains) window.eag_voice_audio_gains[un].disconnect(); window.eag_voice_audio_gains = {}; for (let un in window.eag_voice_audios) window.eag_voice_audios[un].remove(); window.eag_voice_audios = {}; return;")
+	public static native void disconnectVoice();
+	public static final void enableVoice(Voice.VoiceChannel enable) {
+		if (enabledChannel == enable) return;
+		if (enabledChannel == Voice.VoiceChannel.NONE) setVoiceStatus(Voice.VoiceStatus.CONNECTING);
+		enabledChannel = enable;
+		if (enable == Voice.VoiceChannel.NONE) {
+			sendStringData("EAG|VoiceLeave", "");
+			setVoiceStatus(Voice.VoiceStatus.DISCONNECTED);
+		} else {
+			if (enable == Voice.VoiceChannel.GLOBAL) {
+				for (Object playerObject : Minecraft.getMinecraft().theWorld.playerEntities) {
+					String username = ((EntityPlayer) playerObject).username;
+					PannerNode audioPanner = getVoiceAudioPanner(username);
+					if (audioPanner != null) audioPanner.disconnect();
+					HTMLAudioElement audioElement = getVoiceAudioElement(username);
+					if (audioElement != null) audioElement.setMuted(false);
+				}
+			} else {
+				for (Object playerObject : Minecraft.getMinecraft().theWorld.playerEntities) {
+					String username = ((EntityPlayer) playerObject).username;
+					HTMLAudioElement audioElement = getVoiceAudioElement(username);
+					if (audioElement != null) audioElement.setMuted(true);
+					PannerNode audioPanner = getVoiceAudioPanner(username);
+					if (audioPanner != null) audioPanner.connect(audioctx.getDestination());
+				}
+			}
+			sendStringData("EAG|VoiceJoin", "");
+			for (Object playerEntity : Minecraft.getMinecraft().theWorld.playerEntities) sendStringData("EAG|VoiceReq", ((EntityPlayer) playerEntity).username);
+		}
+	}
+	public static final Voice.VoiceChannel getVoiceChannel() {
+		return enabledChannel;
+	}
+	public static final Voice.VoiceStatus getVoiceStatus() {
+		return voiceStatus;
+	}
+	public static final void setVoiceStatus(Voice.VoiceStatus vs) {
+		if (voiceStatus != Voice.VoiceStatus.DISCONNECTED && vs == Voice.VoiceStatus.DISCONNECTED) disconnectVoice();
+		voiceStatus = vs;
+	}
+	@JSBody(params = { "talk" }, script = "window.eag_voice_stream.getAudioTracks()[0].enabled = talk; return;")
+	public static native void activateVoice(boolean talk);
+	private static int voiceProximity = 16;
+	public static final void setVoiceProximity(int prox) {
+		voiceProximity = prox;
+	}
+	public static final int getVoiceProximity() {
+		return voiceProximity;
+	}
+	@JSBody(params = { "volume" }, script = "window.eag_voice_audio_volume = volume; if(!window.eag_voice_audio_gains) window.eag_voice_audio_gains = {}; for (let un in window.eag_voice_audio_gains) window.eag_voice_audio_gains[un].gain.value = volume; if(!window.eag_voice_audios) window.eag_voice_audios = {}; for (let un in window.eag_voice_audios) window.eag_voice_audios[un].volume = volume; return;")
+	public static native void setVoiceListenVolume0(float volume);
+	private static float voiceVolumeListen = 0.5f;
+	public static final void setVoiceListenVolume(float f) {
+		voiceVolumeListen = f;
+		setVoiceListenVolume0(f);
+	}
+	public static final float getVoiceListenVolume() {
+		return voiceVolumeListen;
+	}
+	private static float voiceVolumeSpeak = 0.5f; // todo: implement
+	public static final void setVoiceSpeakVolume(float f) {
+		voiceVolumeSpeak = f;
+	}
+	public static final float getVoiceSpeakVolume() {
+		return voiceVolumeSpeak;
+	}
+	private static final Set<String> mutedSet = new HashSet();
+	public static final Set<String> getVoiceListening() {
+		return new HashSet<>(Arrays.asList(getVoiceRecent0()));
+	}
+	public static final ExpiringSet<String> voiceJoinSet = new ExpiringSet<>(2000);
+	@JSBody(params = {  }, script = "return Object.keys(window.eag_voice_audios).filter(function(un) { return !window.eag_voice_audios[un].srcObject.getAudioTracks()[0].muted; });")
+	public static native String[] getVoiceSpeaking0();
+	public static final Set<String> getVoiceSpeaking() {
+		return new HashSet<>(Arrays.asList(getVoiceSpeaking0()));
+	}
+	@JSBody(params = { "username", "mute" }, script = "if (mute) { window.eag_voice_audios[username].pause(); } else { window.eag_voice_audios[username].play(); } return;")
+	public static native void setVoiceMuted0(String username, boolean mute);
+	public static final void setVoiceMuted(String username, boolean mute) {
+		if(mute) {
+			if (mutedSet.add(username)) setVoiceMuted0(username, true);
+		}else {
+			if (mutedSet.remove(username)) setVoiceMuted0(username, false);
+		}
+	}
+	public static final Set<String> getVoiceMuted() {
+		return mutedSet;
+	}
+	@JSBody(params = {  }, script = "return Object.keys(window.eag_voice_peers);")
+	public static native String[] getVoiceRecent0();
+	public static final List<String> getVoiceRecent() {
+		return Arrays.asList(getVoiceRecent0());
+	}
+	@JSBody(params = { "username" }, script = "return window.eag_voice_audio_panners[username] || null;")
+	private static native PannerNode getVoiceAudioPanner(String username);
+	@JSBody(params = { "username" }, script = "return window.eag_voice_audios[username] || null;")
+	private static native HTMLAudioElement getVoiceAudioElement(String username);
+	private static boolean lastPTT = false;
+	public static final void tickVoice() {
+		if (!voiceAvailable()) return;
+		if (!voiceAllowed()) return;
+		if (getVoiceChannel() == Voice.VoiceChannel.NONE) return;
+
+		if (!voiceJoinSet.isEmpty() && (getVoiceStatus() == Voice.VoiceStatus.CONNECTING || getVoiceStatus() == Voice.VoiceStatus.CONNECTED)) {
+			for (Object playerObject : Minecraft.getMinecraft().theWorld.playerEntities) {
+				EntityPlayer player = (EntityPlayer) playerObject;
+				if (voiceJoinSet.remove(player.username)) sendStringData("EAG|VoiceReq", player.username);
+			}
+		}
+
+		if (getVoiceStatus() != Voice.VoiceStatus.CONNECTED) return;
+
+		if (getVoiceChannel() == Voice.VoiceChannel.PROXIMITY) {
+			for (Object playerObject : Minecraft.getMinecraft().theWorld.playerEntities) {
+				EntityPlayer player = (EntityPlayer) playerObject;
+				PannerNode audioPanner = getVoiceAudioPanner(player.username);
+				if (audioPanner != null) {
+					audioPanner.setPosition((float) player.posX, (float) player.posY, (float) player.posZ);
+					audioPanner.setMaxDistance(voiceVolumeListen * voiceProximity + 0.1f);
+				}
+			}
+		}
+
+		// todo: ignore certain screens such as chat & EDITING book (not SIGNED book...) & signs & creative search box WHEN FOCUSED
+		// even VRChat doesn't bother with input focus checks for their unmute keybind LOL
+		boolean newPTT = isKeyDown(Minecraft.getMinecraft().gameSettings.voicePTTKey);
+		if (lastPTT != newPTT) {
+			lastPTT = newPTT;
+			activateVoice(newPTT);
+		}
 	}
 	public static final void doJavascriptCoroutines() {
 		
@@ -2296,7 +2548,7 @@ public class EaglerAdapterImpl2 {
 	private static int remapKey(int k) {
 		return (k > LWJGLKeyCodes.length || k < 0) ? -1 : LWJGLKeyCodes[k];
 	}
-	
+
 	@JSFunctor
 	private static interface StupidFunctionResolveString extends JSObject {
 		void resolveStr(String s);
