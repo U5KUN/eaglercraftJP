@@ -2009,7 +2009,7 @@ public class EaglerAdapterImpl2 {
 	private static boolean lastUserMedia = false;
 
 	@Async
-	public static native boolean voiceAvailable();
+	public static native Boolean voiceAvailable();
 	private static void voiceAvailable(AsyncCallback<Boolean> callback) {
 		if (!hasGottenUserMedia) {
 			hasGottenUserMedia = true;
@@ -2069,7 +2069,7 @@ public class EaglerAdapterImpl2 {
 			"    window.eag_voice_audios[json.username] = audio;\n" +
 			"    audio.srcObject = event.streams[0];\n" +
 			"    const audioPanner = window.eag_audioctx.createPanner();\n" +
-			"    const audioSource = window.eag_audioctx.createMediaElementSource(audio);\n" +
+			"    const audioSource = window.eag_audioctx.createMediaStreamSource(event.streams[0]);\n" +
 			"    const audioGain = window.eag_audioctx.createGain();\n" +
 			"    window.eag_voice_audio_panners[json.username] = audioPanner;\n" +
 			"    window.eag_voice_audio_gains[json.username] = audioGain;\n" +
@@ -2178,7 +2178,7 @@ public class EaglerAdapterImpl2 {
 		return voiceStatus;
 	}
 	public static final void setVoiceStatus(Voice.VoiceStatus vs) {
-		if (voiceStatus != Voice.VoiceStatus.DISCONNECTED && vs == Voice.VoiceStatus.DISCONNECTED) disconnectVoice();
+		if (voiceStatus != Voice.VoiceStatus.DISCONNECTED && voiceStatus != Voice.VoiceStatus.UNAVAILABLE && vs == Voice.VoiceStatus.DISCONNECTED) disconnectVoice();
 		voiceStatus = vs;
 	}
 	@JSBody(params = { "talk" }, script = "window.eag_voice_stream.getAudioTracks()[0].enabled = talk; return;")
